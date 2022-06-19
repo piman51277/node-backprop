@@ -1,0 +1,25 @@
+{
+  "name": "backprop-2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "out/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node out/index.js",
+    "dev": "tsc && node out/index.js"
+  },
+  "keywords": [],
+  "author": "piman51277",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^17.0.23",
+    "@typescript-eslint/eslint-plugin": "^5.16.0",
+    "@typescript-eslint/parser": "^5.16.0",
+    "benchmark": "^2.1.4",
+    "eslint": "^8.11.0",
+    "typescript": "^4.6.3"
+  },
+  "dependencies": {
+    "@types/benchmark": "^2.1.1"
+  }
+}
