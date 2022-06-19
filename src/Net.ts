@@ -80,27 +80,25 @@ export class Net {
     //start evaluating the net
     const nodes = [input];
 
-    for (let layer = 1; layer < this.dimensions.length; layer++) {
-      const lastLayerSize = this.dimensions[layer - 1];
-      const layerSize = this.dimensions[layer];
-      const lastLayerNodes = nodes[layer - 1];
+    for (let layer = 0; layer < this.dimensions.length - 1; layer++) {
+      const thisLayer = nodes[layer];
+      const nextLayer = [...this.biases[layer]];
+      const weights = this.weights[layer];
 
-      //compute the nodes of the current layer
-      const layerNodes = new Array(layerSize).fill(0);
-
-      let weightPosPrecompute = 0; //equivalent to [node * layerSize + lastLayerSize] or [layerSize][lastLayerSize]
-      for (let node = 0; node < layerSize; node++) {
-        let sum = 0;
-
-        for (let i = 0; i < lastLayerSize; i++) {
-          sum +=
-            lastLayerNodes[i] * this.weights[layer - 1][weightPosPrecompute];
-          weightPosPrecompute++;
+      //iterate over the nodes of the current layer and add the weight
+      let weightPos = 0;
+      for (let node = 0; node < this.dimensions[layer]; node++) {
+        for (
+          let nextNode = 0;
+          nextNode < this.dimensions[layer + 1];
+          nextNode++
+        ) {
+          nextLayer[nextNode] += thisLayer[node] * weights[weightPos];
+          weightPos++;
         }
-        layerNodes[node] = sigmoid(sum + this.biases[layer - 1][node]);
       }
 
-      nodes.push(layerNodes);
+      nodes.push(nextLayer.map(sigmoid));
     }
 
     //return the output
@@ -117,7 +115,8 @@ export class Net {
     const outputs = this.eval(input).reverse();
     const weights = [...this.weights].reverse();
     const dimensions = [...this.dimensions].reverse();
-    const sigmas: number[][] = [];
+    const sigmas: number[][] = []; //used in caching
+    const deltas: number[][] = []; //actual deltas
     const weightGradients: number[][] = [];
 
     //compute the sigma values for the last layer
@@ -128,30 +127,35 @@ export class Net {
       );
     }
     sigmas.push(lastSigma);
+    deltas.push(lastSigma);
 
     //compute the sigma values for the other layers
     for (let layer = 1; layer < dimensions.length; layer++) {
-      const lastLayerSigma = sigmas[layer - 1];
+      const nextLayerSigma = sigmas[layer - 1];
       const thisLayerSigma = [];
-      const weightGradient = [];
+      const thisLayerDelta = [];
+      const thisLayerWeightGradients = [];
+      let weightPos = 0;
       for (let node = 0; node < dimensions[layer]; node++) {
         let sum = 0;
         for (let nextNode = 0; nextNode < dimensions[layer - 1]; nextNode++) {
-          sum +=
-            weights[layer - 1][node + dimensions[layer - 1] * nextNode] *
-            lastLayerSigma[nextNode];
-
-          weightGradient.push(lastLayerSigma[nextNode] * outputs[layer][node]);
+          sum += weights[layer - 1][weightPos] * nextLayerSigma[nextNode];
+          weightPos++;
+          thisLayerWeightGradients.push(
+            nextLayerSigma[nextNode] * outputs[layer][node]
+          );
         }
         thisLayerSigma.push(
           sum * (1 - outputs[layer][node]) * outputs[layer][node]
         );
+        thisLayerDelta.push(sum);
       }
       sigmas.push(thisLayerSigma);
-      weightGradients.push(weightGradient);
+      deltas.push(thisLayerDelta);
+      weightGradients.push(thisLayerWeightGradients);
     }
 
-    return [sigmas.reverse(), weightGradients.reverse()];
+    return [deltas.reverse(), weightGradients.reverse()];
   }
 
   /**
@@ -165,10 +169,10 @@ export class Net {
   ) {
     for (let layer = 1; layer < sigmas.length; layer++) {
       for (let node = 0; node < sigmas[layer].length; node++) {
-        this.biases[layer - 1][node] += sigmas[layer][node] * gamma_b;
+        this.biases[layer - 1][node] -= sigmas[layer][node] * gamma_b;
       }
       this.weights[layer - 1] = this.weights[layer - 1].map((weight, i) => {
-        return weight + weightGradients[layer - 1][i] * gamma;
+        return weight - weightGradients[layer - 1][i] * gamma;
       });
     }
   }
