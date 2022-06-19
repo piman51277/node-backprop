@@ -1,4 +1,3 @@
-import { sigmoid } from "./util/activation";
 import { MSE } from "./util/cost";
 import { generateRandom } from "./util/generateRandom";
 
@@ -7,6 +6,18 @@ type NetConstructor = {
   biases: number[][];
   dimensions: number[];
 };
+
+type Gradient = [number[][], number[][]];
+
+type TrainingData = [number[], number[]][];
+
+type TrainingConfig = {
+  gamma?: number;
+  gamma_b?: number;
+  momentum?: number;
+  batchSize?: number;
+};
+
 export class Net {
   weights: number[][]; //contains all weights
   biases: number[][]; //contains all biases
@@ -64,6 +75,31 @@ export class Net {
     });
   }
 
+  static mergeGradients(gradients: Gradient[]): Gradient {
+    const [deltas, weights] = gradients[0];
+    for (let i = 1; i < gradients.length; i++) {
+      for (let layer = 0; layer < deltas.length; layer++) {
+        for (let node = 0; node < deltas[layer].length; node++) {
+          deltas[layer][node] += gradients[i][0][layer][node];
+        }
+        if (layer >= deltas.length - 1) continue;
+        for (let node = 0; node < weights[layer].length; node++) {
+          weights[layer][node] += gradients[i][1][layer][node];
+        }
+      }
+    }
+    for (let layer = 0; layer < deltas.length; layer++) {
+      for (let node = 0; node < deltas[layer].length; node++) {
+        deltas[layer][node] /= gradients.length;
+      }
+      if (layer >= deltas.length - 1) continue;
+      for (let node = 0; node < weights[layer].length; node++) {
+        weights[layer][node] /= gradients.length;
+      }
+    }
+    return [deltas, weights];
+  }
+
   /**
    * Evaluates the net with the given input.
    * @param input Input to the net.
@@ -98,7 +134,10 @@ export class Net {
         }
       }
 
-      nodes.push(nextLayer.map(sigmoid));
+      nodes[layer + 1] = [];
+      for (let i = 0; i < nextLayer.length; i++) {
+        nodes[layer + 1][i] = 1 / (1 + Math.exp(-nextLayer[i]));
+      }
     }
 
     //return the output
@@ -111,12 +150,11 @@ export class Net {
    * @param expected expected output of the net.
    * @returns gradient of the net.
    */
-  gradient(input: number[], expected: number[]): [number[][], number[][]] {
+  gradient(input: number[], expected: number[]): Gradient {
     const outputs = this.eval(input).reverse();
     const weights = [...this.weights].reverse();
     const dimensions = [...this.dimensions].reverse();
-    const sigmas: number[][] = []; //used in caching
-    const deltas: number[][] = []; //actual deltas
+    const sigmas: number[][] = [];
     const weightGradients: number[][] = [];
 
     //compute the sigma values for the last layer
@@ -127,13 +165,11 @@ export class Net {
       );
     }
     sigmas.push(lastSigma);
-    deltas.push(lastSigma);
 
     //compute the sigma values for the other layers
     for (let layer = 1; layer < dimensions.length; layer++) {
       const nextLayerSigma = sigmas[layer - 1];
       const thisLayerSigma = [];
-      const thisLayerDelta = [];
       const thisLayerWeightGradients = [];
       let weightPos = 0;
       for (let node = 0; node < dimensions[layer]; node++) {
@@ -148,14 +184,12 @@ export class Net {
         thisLayerSigma.push(
           sum * (1 - outputs[layer][node]) * outputs[layer][node]
         );
-        thisLayerDelta.push(sum);
       }
       sigmas.push(thisLayerSigma);
-      deltas.push(thisLayerDelta);
       weightGradients.push(thisLayerWeightGradients);
     }
 
-    return [deltas.reverse(), weightGradients.reverse()];
+    return [sigmas.reverse(), weightGradients.reverse()];
   }
 
   /**
@@ -171,9 +205,10 @@ export class Net {
       for (let node = 0; node < sigmas[layer].length; node++) {
         this.biases[layer - 1][node] -= sigmas[layer][node] * gamma_b;
       }
-      this.weights[layer - 1] = this.weights[layer - 1].map((weight, i) => {
-        return weight - weightGradients[layer - 1][i] * gamma;
-      });
+      for (let weight = 0; weight < this.weights[layer - 1].length; weight++) {
+        this.weights[layer - 1][weight] -=
+          weightGradients[layer - 1][weight] * gamma;
+      }
     }
   }
 
@@ -187,6 +222,19 @@ export class Net {
     const actual = this.eval(input)[this.dimensions.length - 1];
     return MSE(actual, expected);
   }
+
+  /**
+   * Average of error of the net with the given input and expected output. USE ONLY FOR DEBUG
+   * @param data Array containing test data.
+   */
+  errorDataset(data: TrainingData): number {
+    let error = 0;
+    for (let i = 0; i < data.length; i++) {
+      error += this.error(...data[i]);
+    }
+    return error / data.length;
+  }
+
   /**
    * Prints the net.
    */
@@ -195,5 +243,38 @@ export class Net {
     console.log(this.weights.map((n) => n.toString()).join("\n"));
     console.log("Biases: ");
     console.log(this.biases.map((n) => n.toString()).join("\n"));
+  }
+
+  /**
+   * Trains the net with the given input and expected output.
+   * @param data Training data.
+   * @param epochs Number of epochs to train the net.
+   * @param config Configuration of the training.
+   */
+  train(data: TrainingData, epochs: number, config?: TrainingConfig): void {
+    const gamma = config?.gamma ?? 0.2;
+    const gamma_b = config?.gamma_b ?? 0.2;
+    const momentum = config?.momentum ?? 0.5;
+    const batchSize = config?.batchSize ?? 1;
+
+    let lastGradient: Gradient = [[], []];
+    let firstApply = true;
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      let pos = 0;
+      while (pos < data.length) {
+        const batch = data.slice(pos, pos + batchSize);
+        const gradients = batch.map((testCase) => this.gradient(...testCase));
+        const merged = Net.mergeGradients(gradients);
+        lastGradient = merged;
+        this.apply(merged, gamma, gamma_b);
+
+        //add momentum
+        if (!firstApply)
+          this.apply(lastGradient, gamma * momentum, gamma_b * momentum);
+        firstApply = false;
+
+        pos += batchSize;
+      }
+    }
   }
 }
