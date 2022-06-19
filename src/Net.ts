@@ -9,7 +9,7 @@ type NetConstructor = {
 
 type Gradient = [number[][], number[][]];
 
-type TrainingData = [number[], number[]][];
+export type TrainingData = [number[], number[]][];
 
 type TrainingConfig = {
   gamma?: number;
