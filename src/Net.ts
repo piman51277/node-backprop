@@ -1,5 +1,10 @@
-import { MSE } from "./util/cost";
-import { generateRandom } from "./util/generateRandom";
+function generateRandom(min: number, max: number, size: number): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < size; i++) {
+    result.push(Math.random() * (max - min) + min);
+  }
+  return result;
+}
 
 type NetConstructor = {
   weights: number[][];
@@ -220,7 +225,12 @@ export class Net {
    */
   error(input: number[], expected: number[]): number {
     const actual = this.eval(input)[this.dimensions.length - 1];
-    return MSE(actual, expected);
+    return (
+      actual.reduce((acc, curr, i) => {
+        return acc + Math.pow(curr - expected[i], 2);
+      }, 0) *
+      (1 / actual.length)
+    );
   }
 
   /**
