@@ -4,11 +4,9 @@
   "description": "",
   "main": "out/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node out/index.js",
-    "dev": "tsc && node out/index.js"
+    "build": "rm -r out && tsc"
   },
-  "keywords": [],
+  "keywords": ["ai","neural network","backpropagation","typescript"],
   "author": "piman51277",
   "license": "MIT",
   "devDependencies": {
