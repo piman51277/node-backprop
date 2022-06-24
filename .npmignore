@@ -5,5 +5,5 @@ src
 readme
 .eslintrc.json
 .gitignore
-README.md
+.md
 tsconfig.json
