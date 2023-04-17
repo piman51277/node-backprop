@@ -2,7 +2,7 @@
   "name": "@piman51277/backprop",
   "version": "1.0.0",
   "description": "",
-  "main": "out/index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "rm -r out && tsc"
   },
